@@ -2,8 +2,11 @@ from socket import *
 from time import ctime
 import OpenSSL
 import json
+import pickle
 import hashlib
-
+import sys
+sys.path.append('/Users/xiaoxiaoyan/PycharmProjects/X509/Class')
+from Class import Class
 HOST = '127.0.0.1'
 PORT = 21565
 BUFSIZ = 4096
@@ -26,7 +29,10 @@ store_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, store_c
 customer_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, customer_crt_path)
 store_private_key = OpenSSL.crypto.load_privatekey(OpenSSL.crypto.FILETYPE_PEM, store_private_key_path)
 
-
+student_list = {
+    '1001': False,
+    '1002': False
+}
 
 def verify(data):
     # rec_data = eval(data)
@@ -57,6 +63,15 @@ def transferData(addr, data):
     tcpCliSock.send(repr(data).encode("utf8"))
     tcpCliSock.close()
 
+def updateClassInfo(addr):
+    tcpCliSock = socket(AF_INET, SOCK_STREAM)
+    tcpCliSock.connect(addr)
+    tcpCliSock.send('@update'.encode("utf8"))
+    data = tcpCliSock.recv(BUFSIZ)
+    tcpCliSock.close()
+    return data
+
+
 # 服务器通信
 while True:
     print('Store is waiting for connection...')
@@ -66,15 +81,25 @@ while True:
         data = tcpCliSock.recv(BUFSIZ)
         if not data:
             break
+        if data.decode("utf8") == '@log':
+            data = tcpCliSock.recv(BUFSIZ)
+            data_rev = data.decode("utf8")
+            if data_rev in student_list.keys():
+                if student_list[data_rev]:
+                    tcpCliSock.send(b"OK")
+                else:
+                    student_list[data_rev] = True
+                    tcpCliSock.send(b"OK")
+            else:
+                tcpCliSock.send(b"Wrong ID")
         if data.decode("utf8") == '@scan':
-            tcpCliSock.send(repr(list).encode("utf8"))
+            tcpCliSock.send(updateClassInfo(BANK_ADDR))
         if data.decode("utf8") == '@comment':
-            print("buying...")
             data = tcpCliSock.recv(BUFSIZ)
             data_rev = eval(data.decode("utf8"))
-            print(data_rev)
             to_verify = data_rev['to_verify']
             to_comment = data_rev['to_comment']
+            print(data_rev)
             if verify(to_verify):
                 transferData(BANK_ADDR, to_comment)
     tcpCliSock.close()
