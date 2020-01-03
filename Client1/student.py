@@ -17,52 +17,22 @@ customer_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, cust
 
 ca_public_key = ca_crt.get_pubkey()
 customer_private_key = OpenSSL.crypto.load_privatekey(OpenSSL.crypto.FILETYPE_PEM, customer_private_key_path)
-# print(customer_private_key)
-
-# PI = '62222'
-# OI = 'apple:100, price:1000'
-# #
-# sha1_PI = hashlib.sha1()
-# sha1_PI.update(PI.encode("utf8"))
-# PIMD = sha1_PI.hexdigest()
-#
-# sha1_OI = hashlib.sha1()
-# sha1_OI.update(OI.encode("utf8"))
-# OIMD = sha1_OI.hexdigest()
-#
-# sha1_POMD = hashlib.sha1()
-# sha1_POMD.update((sha1_PI.hexdigest()+sha1_OI.hexdigest()).encode("utf8"))
-# POMD = sha1_POMD.hexdigest()
-#
-# sha1_POMD_Store = hashlib.sha1()
-# sha1_POMD_Store.update((PIMD+hashlib.sha1(OI.encode("utf8")).hexdigest()).encode("utf8"))
-# POMD_Store = sha1_POMD_Store.hexdigest()
-# print(bank_crt.get_signature_algorithm())
-# sign = OpenSSL.crypto.sign(customer_private_key, POMD, "sha1")
-#
-# try:
-#     OpenSSL.crypto.verify(customer_crt, sign, POMD_Store, "sha1")
-#     print("true")
-# except OpenSSL.crypto.Error:
-#     print('false')
-#
-
 
 HOST = '127.0.0.1'
 
 BANK_POST = 21567
-BUFSIZ = 1024
+BUFSIZ = 4096
 BANK_ADDR = (HOST, BANK_POST)
 
-STORE_POST = 21569
+STORE_POST = 21565
 STORE_ADDR = (HOST, STORE_POST)
 
 
 tcpCliSock_store = socket(AF_INET, SOCK_STREAM)
 tcpCliSock_store.connect(STORE_ADDR)
 
-tcpCliSock_bank = socket(AF_INET, SOCK_STREAM)
-tcpCliSock_bank.connect(BANK_ADDR)
+# tcpCliSock_bank = socket(AF_INET, SOCK_STREAM)
+# tcpCliSock_bank.connect(BANK_ADDR)
 
 
 # 利用私钥签名，得到DS
@@ -129,8 +99,9 @@ def cmd_chose_commodity():
 
 commodity_info = {}
 
+student_ID = input("Log in with your student_ID\n:")
 while True:
-    data = input('>>>scan store:@scan, buy something: @buy\n')
+    data = input('>>>scan class list:@scan or rate class: @comment\n')
     if not data:
         break
     if data == "@scan":
@@ -142,33 +113,30 @@ while True:
         commodity_info = data
         for name, info in data.items():
             print(name, ':', info)
-    if data == "@buy":
+    if data == "@comment":
         tcpCliSock_store.send(data.encode("utf8"))
-        apple = input() #输入购买多少APPLE
-        orange = input() #输入购买多少ORANGE
-        apple_price = commodity_info['apple']['price'] * float(apple)
-        orange_price = commodity_info['orange']['price'] * float(orange)
+        to_class = input("Please input the class you want to rate:\n") # class
+        score = input("Please score for this class:\n") # 打分
+        comments = input("Please rate this class:\n") # 评论
+
         original_data = {
             "PI": {
-                'account': '1001',
-                'amount': orange_price + apple_price
+                'account': student_ID,
             },
             "OI":{
-                "apple": {
-                    "price": commodity_info['apple']['price'],
-                    "amount": apple
-                },
-                "orange": {
-                    "price": commodity_info['orange']['price'],
-                    "amount": orange
-                }
+                "to_class": to_class,
+                "score": score,
+                "comments": comments
             }
         }
 
         to_bank_data = to_bank(original_data)
         to_store_data = to_store(original_data)
-        tcpCliSock_store.send(repr(to_store_data).encode("utf8"))
-        tcpCliSock_bank.send(repr(to_bank_data).encode("utf8"))
+
+        send_data = {
+            'to_verify': to_bank_data,
+            'to_comment': to_store_data
+        }
+        tcpCliSock_store.send(repr(send_data).encode("utf8"))
 
 tcpCliSock_store.close()
-tcpCliSock_bank.close()

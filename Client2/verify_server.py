@@ -5,9 +5,12 @@ import json
 import hashlib
 
 HOST = '127.0.0.1'
-PORT = 21567
-BUFSIZ = 1024
+PORT = 21565
+BUFSIZ = 4096
 ADDR = (HOST, PORT)
+
+BANK_POST = 21567
+BANK_ADDR = (HOST, BANK_POST)
 
 tcpSerSock = socket(AF_INET, SOCK_STREAM)
 tcpSerSock.bind(ADDR)
@@ -16,35 +19,18 @@ tcpSerSock.listen(5)
 customer_crt_path = open('client1.crt').read()
 store_crt_path = open('client2.crt').read()
 bank_crt_path = open('server.crt').read()
-bank_private_key_path = open('server.pem').read()
+store_private_key_path = open('client2.pem').read()
 
 bank_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, bank_crt_path)
 store_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, store_crt_path)
 customer_crt = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, customer_crt_path)
-customer_private_key = OpenSSL.crypto.load_privatekey(OpenSSL.crypto.FILETYPE_PEM, bank_private_key_path)
+store_private_key = OpenSSL.crypto.load_privatekey(OpenSSL.crypto.FILETYPE_PEM, store_private_key_path)
 
-
-countList = {
-    '1001': {'balance': 1000.0},
-    '1002': {'balance': 500.0}
-}
-
-
-def transfer(acc_from, acc_to, count_list, amount):
-    a = count_list[acc_from]
-    b = count_list[acc_to]
-    if a['balance'] < amount:
-        print("Trade failed, balance is not adequate")
-        return False
-    else:
-        a['balance'] -= amount
-        b['balance'] += amount
-        print("Trade succeed!")
-    return True
 
 
 def verify(data):
-    rec_data = eval(data)
+    # rec_data = eval(data)
+    rec_data = data
     PI = rec_data['PI']
     OIMD = rec_data['OIMD']
     DS = rec_data['DS']
@@ -60,30 +46,36 @@ def verify(data):
     try:
         OpenSSL.crypto.verify(customer_crt, DS, POMD, "sha1")
         print("Verifying sign succeed...")
+        return True
     except OpenSSL.crypto.Error:
+        return False
         print('Verifying sign failed...')
 
+def transferData(addr, data):
+    tcpCliSock = socket(AF_INET, SOCK_STREAM)
+    tcpCliSock.connect(addr)
+    tcpCliSock.send(repr(data).encode("utf8"))
+    tcpCliSock.close()
 
-def process(data, countList, sock):
-    rec_data = eval(data)
-    PI = rec_data['PI']
-    if transfer(PI['account'], '1002', countList, amount=PI['amount']):
-        sock.send("Succeed".encode('utf-8'))
-    else:
-        sock.send("You have nn money".encode('utf-8'))
-
-
+# 服务器通信
 while True:
-    print('waiting for connection...')
+    print('Store is waiting for connection...')
     tcpCliSock, addr = tcpSerSock.accept()
     print('...connnecting from:', addr)
     while True:
         data = tcpCliSock.recv(BUFSIZ)
         if not data:
             break
-        verify(data)
-        process(data, countList, tcpCliSock)
-        print(countList['1001']['balance'])
-        print(countList['1002']['balance'])
+        if data.decode("utf8") == '@scan':
+            tcpCliSock.send(repr(list).encode("utf8"))
+        if data.decode("utf8") == '@comment':
+            print("buying...")
+            data = tcpCliSock.recv(BUFSIZ)
+            data_rev = eval(data.decode("utf8"))
+            print(data_rev)
+            to_verify = data_rev['to_verify']
+            to_comment = data_rev['to_comment']
+            if verify(to_verify):
+                transferData(BANK_ADDR, to_comment)
     tcpCliSock.close()
 tcpSerSock.close()
